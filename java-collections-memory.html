@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Java Collections & Memory Allocations</title>
+    <title>Java Collections & Memory Manual</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <header>
-        <h1>Java Collections & Memory Allocations</h1>
-        <p>Understanding how Java collections work with memory</p>
+        <h1>Java Collections &amp; Memory Manual</h1>
+        <p>Understanding iteration internals, zero-allocation patterns, and memory optimization</p>
     </header>
 
     <nav>
@@ -20,360 +20,338 @@
     </nav>
 
     <main>
-        <section id="arraylist-linkedlist">
-            <h2>ArrayList vs LinkedList Memory Allocation</h2>
-            <p>Understanding the memory characteristics of different List implementations is crucial for writing efficient Java code.</p>
-            
-            <h3>ArrayList Memory Model</h3>
-            <p>ArrayList uses a dynamic array internally. When elements are added beyond capacity, a new larger array is allocated.</p>
-            
-            <div class="code-block">
-                <pre><code>// ArrayList memory allocation example
-import java.util.ArrayList;
+        <section id="iteration-internals">
+            <h2>1. Iteration Internals &amp; Memory</h2>
 
-public class ArrayListMemoryExample {
-    public static void main(String[] args) {
-        // Creates ArrayList with default initial capacity of 10
-        ArrayList&lt;Integer&gt; list = new ArrayList&lt;&gt;();
-        
-        System.out.println("Initial capacity: 10 elements");
-        
-        // Adding 11th element triggers resize
-        for (int i = 0; i < 11; i++) {
-            list.add(i);
-        }
-        
-        // Internal array grows by ~50% (10 -> 15)
-        System.out.println("After 11 additions, capacity: ~15 elements");
-        
-        // Pre-allocating capacity avoids resizing
-        ArrayList&lt;Integer&gt; efficientList = new ArrayList&lt;&gt;(100);
-        System.out.println("Pre-allocated capacity: 100 elements");
+            <h3>Enhanced for loop vs Iterator</h3>
+            <div class="code-block">
+                <pre><code>// List iteration
+List&lt;String&gt; list = new ArrayList&lt;&gt;(Arrays.asList("A", "B", "C"));
+
+// Enhanced for loop - creates Iterator internally
+for (String s : list) {
+    System.out.println(s);
+}
+
+// Equivalent to:
+Iterator&lt;String&gt; it = list.iterator();
+while (it.hasNext()) {
+    System.out.println(it.next());
+}
+
+// Index-based iteration - no Iterator allocation
+for (int i = 0; i &lt; list.size(); i++) {
+    System.out.println(list.get(i));
+}</code></pre>
+            </div>
+
+            <h3>Empty collection behavior</h3>
+            <div class="code-block">
+                <pre><code>List&lt;String&gt; empty = Collections.emptyList();
+
+// Still allocates iterator object
+for (String s : empty) {
+    System.out.println(s);  // Never executes
+}
+
+// Better: check size first
+if (!empty.isEmpty()) {
+    for (String s : empty) {
+        System.out.println(s);
     }
 }</code></pre>
             </div>
 
-            <div class="info-box">
-                <strong>Memory Impact:</strong>
-                <ul>
-                    <li>ArrayList stores elements in contiguous memory</li>
-                    <li>Growth factor is approximately 1.5x (old capacity + (old capacity >> 1))</li>
-                    <li>Unused capacity wastes memory but provides O(1) amortized insertion</li>
-                    <li>Each element: 4 bytes (reference) + object overhead</li>
-                </ul>
-            </div>
-
-            <h3>LinkedList Memory Model</h3>
-            <p>LinkedList uses nodes with references to previous and next elements, creating overhead but enabling efficient insertions.</p>
-            
+            <h3>ConcurrentModificationException</h3>
             <div class="code-block">
-                <pre><code>// LinkedList memory allocation example
-import java.util.LinkedList;
+                <pre><code>List&lt;Integer&gt; numbers = new ArrayList&lt;&gt;(Arrays.asList(1, 2, 3, 4, 5));
 
-public class LinkedListMemoryExample {
-    public static void main(String[] args) {
-        LinkedList&lt;Integer&gt; list = new LinkedList&lt;&gt;();
-        
-        // Each node contains:
-        // - Element reference (4-8 bytes)
-        // - Previous node reference (4-8 bytes)
-        // - Next node reference (4-8 bytes)
-        // - Object header (~12-16 bytes)
-        // Total: ~32-40 bytes per node
-        
-        for (int i = 0; i < 10; i++) {
-            list.add(i);
-        }
-        
-        System.out.println("10 elements in LinkedList");
-        System.out.println("Memory: ~320-400 bytes (vs ~40-80 bytes for ArrayList)");
+// Fail-fast iterator throws ConcurrentModificationException
+for (Integer n : numbers) {
+    if (n % 2 == 0) {
+        numbers.remove(n);  // ❌ Throws exception!
+    }
+}
+
+// Correct approach using Iterator.remove()
+Iterator&lt;Integer&gt; it = numbers.iterator();
+while (it.hasNext()) {
+    Integer n = it.next();
+    if (n % 2 == 0) {
+        it.remove();  // ✅ Safe removal
     }
 }</code></pre>
             </div>
 
-            <div class="info-box">
-                <strong>Memory Impact:</strong>
-                <ul>
-                    <li>Each node requires ~32-40 bytes overhead</li>
-                    <li>No wasted capacity (each add allocates exactly one node)</li>
-                    <li>2-3x more memory per element than ArrayList</li>
-                    <li>Better for frequent insertions/deletions in the middle</li>
-                </ul>
-            </div>
-        </section>
-
-        <section id="hashmap">
-            <h2>HashMap Memory Management</h2>
-            <p>HashMap uses an array of buckets with linked lists (or trees for high collision rates) to store key-value pairs.</p>
-            
-            <div class="code-block">
-                <pre><code>// HashMap memory allocation example
-import java.util.HashMap;
-
-public class HashMapMemoryExample {
-    public static void main(String[] args) {
-        // Default initial capacity: 16 buckets
-        // Default load factor: 0.75
-        HashMap&lt;String, Integer&gt; map = new HashMap&lt;&gt;();
-        
-        System.out.println("Initial capacity: 16 buckets");
-        System.out.println("Resize threshold: 16 * 0.75 = 12 entries");
-        
-        // Adding 13th entry triggers resize to 32 buckets
-        for (int i = 0; i < 13; i++) {
-            map.put("key" + i, i);
-        }
-        
-        System.out.println("After 13 entries, capacity: 32 buckets");
-        
-        // Pre-sizing for known data sets
-        HashMap&lt;String, Integer&gt; efficientMap = new HashMap&lt;&gt;(100);
-        System.out.println("Pre-allocated capacity: 128 buckets (next power of 2)");
-    }
-}</code></pre>
-            </div>
-
-            <div class="info-box">
-                <strong>Memory Impact:</strong>
-                <ul>
-                    <li>Each entry (Node): ~32 bytes (key ref + value ref + hash + next ref + header)</li>
-                    <li>Bucket array: capacity * 4-8 bytes</li>
-                    <li>Capacity is always a power of 2</li>
-                    <li>Resize occurs when size > capacity * loadFactor</li>
-                    <li>Resize creates new array with 2x capacity and rehashes all entries</li>
-                </ul>
-            </div>
-
-            <h3>HashMap Collision Handling</h3>
-            <div class="code-block">
-                <pre><code>// Example showing collision impact
-import java.util.HashMap;
-
-public class HashMapCollisionExample {
-    static class BadHashKey {
-        private int value;
-        
-        public BadHashKey(int value) {
-            this.value = value;
-        }
-        
-        @Override
-        public int hashCode() {
-            return 1; // All objects hash to same bucket!
-        }
-        
-        @Override
-        public boolean equals(Object obj) {
-            if (!(obj instanceof BadHashKey)) return false;
-            return this.value == ((BadHashKey) obj).value;
-        }
-    }
-    
-    public static void main(String[] args) {
-        HashMap&lt;BadHashKey, String&gt; map = new HashMap&lt;&gt;();
-        
-        // All entries collide in same bucket
-        for (int i = 0; i < 100; i++) {
-            map.put(new BadHashKey(i), "value" + i);
-        }
-        
-        // With Java 8+: converts to TreeNode after 8 collisions
-        System.out.println("100 entries in single bucket");
-        System.out.println("List converted to tree for better lookup performance");
-    }
-}</code></pre>
-            </div>
-        </section>
-
-        <section id="arraylist-capacity">
-            <h2>ArrayList Capacity Management</h2>
-            <p>Understanding ArrayList's growth strategy helps optimize memory usage.</p>
-            
-            <div class="code-block">
-                <pre><code>// ArrayList capacity and trimming example
-import java.util.ArrayList;
-
-public class ArrayListCapacityExample {
-    public static void main(String[] args) {
-        ArrayList&lt;String&gt; list = new ArrayList&lt;&gt;();
-        
-        // Add 1000 elements - capacity grows: 10 -> 15 -> 22 -> 33 -> ...
-        for (int i = 0; i < 1000; i++) {
-            list.add("Element " + i);
-        }
-        
-        System.out.println("Size: " + list.size());
-        // Internal capacity is likely ~1280 (wasted: 280 slots * 4 bytes = ~1KB)
-        
-        // Remove 900 elements
-        list.subList(100, 1000).clear();
-        System.out.println("Size after removal: " + list.size());
-        
-        // Capacity still ~1280 - wasted memory!
-        
-        // Trim to actual size
-        list.trimToSize();
-        System.out.println("Capacity trimmed to size: 100");
-        
-        // Alternative: create new list with exact size
-        ArrayList&lt;String&gt; optimized = new ArrayList&lt;&gt;(list);
-        System.out.println("New list with exact capacity: " + optimized.size());
-    }
-}</code></pre>
-            </div>
-
-            <div class="info-box">
-                <strong>Best Practice:</strong>
-                <ul>
-                    <li>Use <code>trimToSize()</code> after bulk removals</li>
-                    <li>Pre-allocate capacity when size is known</li>
-                    <li>Consider ArrayList(Collection) constructor for exact sizing</li>
-                    <li>Monitor memory with <code>jmap</code> or profilers</li>
-                </ul>
-            </div>
-        </section>
-
-        <section id="best-practices">
-            <h2>Memory Best Practices</h2>
-            
-            <h3>1. Choose the Right Collection</h3>
             <div class="comparison-table">
                 <table>
                     <thead>
                         <tr>
                             <th>Collection</th>
-                            <th>Best Use Case</th>
-                            <th>Memory Overhead</th>
+                            <th>Iterator Type</th>
+                            <th>Fail-Fast</th>
+                            <th>Weakly Consistent</th>
+                            <th>Allocation</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
                             <td>ArrayList</td>
-                            <td>Random access, append-heavy</td>
-                            <td>Low (extra capacity)</td>
-                        </tr>
-                        <tr>
-                            <td>LinkedList</td>
-                            <td>Frequent insertions/removals</td>
-                            <td>High (~32 bytes/node)</td>
+                            <td>Iterator</td>
+                            <td>✅</td>
+                            <td>❌</td>
+                            <td>✅</td>
                         </tr>
                         <tr>
                             <td>HashMap</td>
-                            <td>Key-value lookups</td>
-                            <td>Medium (buckets + nodes)</td>
+                            <td>EntryIterator</td>
+                            <td>✅</td>
+                            <td>❌</td>
+                            <td>✅</td>
                         </tr>
                         <tr>
-                            <td>HashSet</td>
-                            <td>Unique elements</td>
-                            <td>Medium (wraps HashMap)</td>
+                            <td>ConcurrentHashMap</td>
+                            <td>Key/Value Iterator</td>
+                            <td>❌</td>
+                            <td>✅</td>
+                            <td>✅</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="zero-allocation">
+            <h2>2. Zero-Allocation Iteration Patterns</h2>
+
+            <div class="code-block">
+                <pre><code>// Index-based iteration over ArrayList avoids iterator allocation
+ArrayList&lt;String&gt; list = new ArrayList&lt;&gt;(Arrays.asList("Apple", "Banana", "Cherry"));
+
+// Zero allocation - no iterator created
+for (int i = 0; i &lt; list.size(); i++) {
+    System.out.println(list.get(i));
+}
+
+// Output:
+// Apple
+// Banana
+// Cherry</code></pre>
+            </div>
+
+            <div class="code-block">
+                <pre><code>// Using primitive collections from fastutil
+it.unimi.dsi.fastutil.ints.IntArrayList list2 = new it.unimi.dsi.fastutil.ints.IntArrayList();
+list2.add(10); 
+list2.add(20);
+for (int i = 0; i &lt; list2.size(); i++) {
+    System.out.println(list2.getInt(i));
+}
+// Output:
+// 10
+// 20</code></pre>
+            </div>
+
+            <div class="info-box">
+                <strong>Zero-Allocation Benefits:</strong>
+                <ul>
+                    <li>No iterator object allocation per loop</li>
+                    <li>Reduced GC pressure in tight loops</li>
+                    <li>Better cache locality with primitive arrays</li>
+                    <li>Ideal for high-frequency operations</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="concurrent-collections">
+            <h2>3. Concurrent Collections &amp; Memory</h2>
+
+            <div class="code-block">
+                <pre><code>ConcurrentHashMap&lt;String, Integer&gt; map = new ConcurrentHashMap&lt;&gt;();
+map.put("one", 1);
+map.put("two", 2);
+map.put("three", 3);
+
+// Weakly consistent iterator - allows concurrent modifications
+for (Map.Entry&lt;String, Integer&gt; entry : map.entrySet()) {
+    System.out.println(entry.getKey() + " = " + entry.getValue());
+    // Safe to modify map during iteration
+    map.putIfAbsent("four", 4);
+}
+
+// CopyOnWriteArrayList - creates copy on modification
+CopyOnWriteArrayList&lt;String&gt; cowList = new CopyOnWriteArrayList&lt;&gt;();
+cowList.add("A");
+cowList.add("B");
+
+// Iterator sees snapshot at time of creation
+Iterator&lt;String&gt; it = cowList.iterator();
+cowList.add("C");  // Doesn't affect iterator
+
+while (it.hasNext()) {
+    System.out.println(it.next());  // Prints: A, B (not C)
+}</code></pre>
+            </div>
+
+            <div class="info-box">
+                <strong>Concurrent Collection Characteristics:</strong>
+                <ul>
+                    <li>ConcurrentHashMap: Weakly consistent iterators, segment-based locking</li>
+                    <li>CopyOnWriteArrayList: Snapshot iterators, expensive writes</li>
+                    <li>No ConcurrentModificationException thrown</li>
+                    <li>Higher memory overhead for thread safety</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="lambdas">
+            <h2>4. Lambdas in Collection Operations</h2>
+
+            <div class="code-block">
+                <pre><code>// Non-capturing lambda in forEach
+List&lt;Integer&gt; numbers = Arrays.asList(1, 2, 3, 4, 5);
+
+// Non-capturing lambda - can be reused by JVM
+numbers.forEach(n -&gt; System.out.println(n));
+
+// Capturing lambda - allocates new object each time
+int multiplier = 10;
+numbers.forEach(n -&gt; System.out.println(n * multiplier));  // Captures 'multiplier'
+
+// Method reference - preferred, zero allocation
+numbers.forEach(System.out::println);
+
+// Stream operations
+long sum = numbers.stream()
+    .filter(n -&gt; n % 2 == 0)    // Non-capturing
+    .mapToInt(Integer::intValue)
+    .sum();
+System.out.println("Sum of evens: " + sum);  // 6</code></pre>
+            </div>
+
+            <div class="comparison-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Lambda Type</th>
+                            <th>Allocates</th>
+                            <th>JVM Reuse Possible</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Non-capturing</td>
+                            <td>❌</td>
+                            <td>✅</td>
                         </tr>
                         <tr>
-                            <td>TreeMap</td>
-                            <td>Sorted key-value pairs</td>
-                            <td>High (Red-Black tree nodes)</td>
+                            <td>Capturing</td>
+                            <td>✅</td>
+                            <td>❌</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
 
-            <h3>2. Pre-sizing Collections</h3>
-            <div class="code-block">
-                <pre><code>// Good: Pre-size when you know the size
-ArrayList&lt;String&gt; list = new ArrayList&lt;&gt;(expectedSize);
-HashMap&lt;String, Integer&gt; map = new HashMap&lt;&gt;(expectedSize);
-
-// Better: Account for load factor in HashMap
-int mapCapacity = (int) (expectedSize / 0.75f) + 1;
-HashMap&lt;String, Integer&gt; efficientMap = new HashMap&lt;&gt;(mapCapacity);
-
-// Bad: Default sizing with known large data
-ArrayList&lt;String&gt; inefficient = new ArrayList&lt;&gt;(); // Will resize multiple times
-for (int i = 0; i < 10000; i++) {
-    inefficient.add("Item " + i);
-}</code></pre>
-            </div>
-
-            <h3>3. Avoiding Memory Leaks</h3>
-            <div class="code-block">
-                <pre><code>// Memory leak example with static collection
-public class MemoryLeakExample {
-    // This collection grows indefinitely!
-    private static final List&lt;Object&gt; cache = new ArrayList&lt;&gt;();
-    
-    public void cacheData(Object data) {
-        cache.add(data); // Never removed!
-    }
-}
-
-// Solution: Use bounded cache or WeakHashMap
-import java.util.LinkedHashMap;
-import java.util.Map;
-
-public class BoundedCacheExample {
-    private static final int MAX_ENTRIES = 100;
-    
-    private final Map&lt;String, Object&gt; cache = new LinkedHashMap&lt;String, Object&gt;(
-        16, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry eldest) {
-            return size() > MAX_ENTRIES;
-        }
-    };
-    
-    public void cacheData(String key, Object value) {
-        cache.put(key, value); // Automatically removes oldest entry
-    }
-}</code></pre>
-            </div>
-
-            <h3>4. Monitoring Memory Usage</h3>
-            <div class="code-block">
-                <pre><code>// Simple memory monitoring
-public class MemoryMonitor {
-    public static void printMemoryUsage(String label) {
-        Runtime runtime = Runtime.getRuntime();
-        long totalMemory = runtime.totalMemory();
-        long freeMemory = runtime.freeMemory();
-        long usedMemory = totalMemory - freeMemory;
-        
-        System.out.println(label + ":");
-        System.out.println("  Used: " + (usedMemory / 1024 / 1024) + " MB");
-        System.out.println("  Free: " + (freeMemory / 1024 / 1024) + " MB");
-        System.out.println("  Total: " + (totalMemory / 1024 / 1024) + " MB");
-    }
-    
-    public static void main(String[] args) {
-        printMemoryUsage("Before allocation");
-        
-        ArrayList&lt;byte[]&gt; list = new ArrayList&lt;&gt;();
-        for (int i = 0; i < 1000; i++) {
-            list.add(new byte[1024]); // 1KB per element
-        }
-        
-        printMemoryUsage("After adding 1000 * 1KB");
-        
-        list.clear();
-        System.gc(); // Suggest garbage collection
-        
-        printMemoryUsage("After clear and GC");
-    }
-}</code></pre>
+            <div class="info-box">
+                <strong>Lambda Memory Tips:</strong>
+                <ul>
+                    <li>Prefer method references over lambdas when possible</li>
+                    <li>Avoid capturing local variables in hot paths</li>
+                    <li>Non-capturing lambdas can be singleton instances</li>
+                    <li>Use primitive streams (IntStream, LongStream) to avoid boxing</li>
+                </ul>
             </div>
         </section>
 
-        <section class="summary">
-            <h2>Summary</h2>
+        <section id="memory-gc">
+            <h2>5. Memory Considerations &amp; GC</h2>
+
+            <div class="code-block">
+                <pre><code>// ArrayList vs LinkedList memory
+ArrayList&lt;Integer&gt; arrayList = new ArrayList&lt;&gt;();
+LinkedList&lt;Integer&gt; linkedList = new LinkedList&lt;&gt;();
+
+// ArrayList: contiguous array, better cache locality
+for (int i = 0; i &lt; 1000; i++) {
+    arrayList.add(i);  // Amortized O(1), occasional resize
+}
+
+// LinkedList: each node ~40 bytes overhead
+for (int i = 0; i &lt; 1000; i++) {
+    linkedList.add(i);  // Each add allocates new node
+}
+
+// Memory comparison:
+// ArrayList: ~4KB for array + ~16 bytes object header
+// LinkedList: ~40KB (40 bytes × 1000 nodes)
+
+// Pre-sizing to avoid allocations
+ArrayList&lt;Integer&gt; sized = new ArrayList&lt;&gt;(1000);  // No resize needed
+for (int i = 0; i &lt; 1000; i++) {
+    sized.add(i);  // Pure O(1), no reallocation
+}</code></pre>
+            </div>
+
             <div class="info-box">
-                <strong>Key Takeaways:</strong>
+                <strong>GC Impact:</strong>
                 <ul>
-                    <li>ArrayList is memory-efficient for most use cases but wastes capacity during growth</li>
-                    <li>LinkedList has high per-element overhead (~32 bytes) but no wasted capacity</li>
-                    <li>HashMap requires careful sizing; consider load factor when pre-allocating</li>
-                    <li>Always pre-size collections when the expected size is known</li>
-                    <li>Use <code>trimToSize()</code> after bulk removals from ArrayList</li>
-                    <li>Monitor memory usage with profiling tools and Runtime API</li>
-                    <li>Avoid memory leaks by using bounded caches or weak references</li>
+                    <li>ArrayList resizing creates temporary garbage (old array)</li>
+                    <li>LinkedList creates many small objects (higher GC pressure)</li>
+                    <li>HashMap rehashing creates temporary garbage</li>
+                    <li>Pre-sizing collections reduces allocation rate</li>
+                    <li>Use object pools for frequently allocated objects</li>
                 </ul>
+            </div>
+        </section>
+
+        <section id="practical-checklist">
+            <h2>6. Practical Checklist</h2>
+            <ul>
+                <li>Use index-based loops for ArrayList/arrays when possible.</li>
+                <li>Prefer primitive collections for high-frequency operations.</li>
+                <li>Use weakly consistent iterators for concurrent maps.</li>
+                <li>Prefer method references / non-capturing lambdas in collection operations.</li>
+                <li>Reuse objects/buffers to reduce GC pressure.</li>
+                <li>Avoid LinkedList unless needed; prefer ArrayList.</li>
+                <li>Profile memory with JMH or async-profiler when optimizing collections.</li>
+            </ul>
+
+            <div class="comparison-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Pattern</th>
+                            <th>Allocates?</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Enhanced for (ArrayList)</td>
+                            <td>✅</td>
+                        </tr>
+                        <tr>
+                            <td>Index loop (ArrayList)</td>
+                            <td>❌</td>
+                        </tr>
+                        <tr>
+                            <td>Iterator (empty)</td>
+                            <td>✅</td>
+                        </tr>
+                        <tr>
+                            <td>Non-capturing lambda forEach</td>
+                            <td>❌</td>
+                        </tr>
+                        <tr>
+                            <td>Capturing lambda forEach</td>
+                            <td>✅</td>
+                        </tr>
+                        <tr>
+                            <td>LinkedList iteration</td>
+                            <td>✅</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </section>
     </main>
