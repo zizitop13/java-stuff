@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Java Collections & Memory Manual</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>Java Collections &amp; Memory Manual</h1>
+        <p>Understanding iteration internals, zero-allocation patterns, and memory optimization</p>
+    </header>
+
+    <nav>
+        <ul>
+            <li><a href="index.html">Home</a></li>
+            <li><a href="java-collections-memory.html" class="active">Collections & Memory</a></li>
+        </ul>
+    </nav>
+
+    <main>
+        <section id="iteration-internals">
+            <h2>1. Iteration Internals &amp; Memory</h2>
+
+            <h3>Enhanced for loop vs Iterator</h3>
+            <div class="code-block">
+                <pre><code>// List iteration
+List&lt;String&gt; list = new ArrayList&lt;&gt;(Arrays.asList("A", "B", "C"));
+
+// Enhanced for loop - creates Iterator internally
+for (String s : list) {
+    System.out.println(s);
+}
+
+// Equivalent to:
+Iterator&lt;String&gt; it = list.iterator();
+while (it.hasNext()) {
+    System.out.println(it.next());
+}
+
+// Index-based iteration - no Iterator allocation
+for (int i = 0; i &lt; list.size(); i++) {
+    System.out.println(list.get(i));
+}</code></pre>
+            </div>
+
+            <h3>Empty collection behavior</h3>
+            <div class="code-block">
+                <pre><code>List&lt;String&gt; empty = Collections.emptyList();
+
+// Still allocates iterator object
+for (String s : empty) {
+    System.out.println(s);  // Never executes
+}
+
+// Better: check size first
+if (!empty.isEmpty()) {
+    for (String s : empty) {
+        System.out.println(s);
+    }
+}</code></pre>
+            </div>
+
+            <h3>ConcurrentModificationException</h3>
+            <div class="code-block">
+                <pre><code>List&lt;Integer&gt; numbers = new ArrayList&lt;&gt;(Arrays.asList(1, 2, 3, 4, 5));
+
+// Fail-fast iterator throws ConcurrentModificationException
+for (Integer n : numbers) {
+    if (n % 2 == 0) {
+        numbers.remove(n);  // ❌ Throws exception!
+    }
+}
+
+// Correct approach using Iterator.remove()
+Iterator&lt;Integer&gt; it = numbers.iterator();
+while (it.hasNext()) {
+    Integer n = it.next();
+    if (n % 2 == 0) {
+        it.remove();  // ✅ Safe removal
+    }
+}</code></pre>
+            </div>
+
+            <div class="comparison-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Collection</th>
+                            <th>Iterator Type</th>
+                            <th>Fail-Fast</th>
+                            <th>Weakly Consistent</th>
+                            <th>Allocation</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>ArrayList</td>
+                            <td>Iterator</td>
+                            <td>✅</td>
+                            <td>❌</td>
+                            <td>✅</td>
+                        </tr>
+                        <tr>
+                            <td>HashMap</td>
+                            <td>EntryIterator</td>
+                            <td>✅</td>
+                            <td>❌</td>
+                            <td>✅</td>
+                        </tr>
+                        <tr>
+                            <td>ConcurrentHashMap</td>
+                            <td>Key/Value Iterator</td>
+                            <td>❌</td>
+                            <td>✅</td>
+                            <td>✅</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="zero-allocation">
+            <h2>2. Zero-Allocation Iteration Patterns</h2>
+
+            <div class="code-block">
+                <pre><code>// Index-based iteration over ArrayList avoids iterator allocation
+ArrayList&lt;String&gt; list = new ArrayList&lt;&gt;(Arrays.asList("Apple", "Banana", "Cherry"));
+
+// Zero allocation - no iterator created
+for (int i = 0; i &lt; list.size(); i++) {
+    System.out.println(list.get(i));
+}
+
+// Output:
+// Apple
+// Banana
+// Cherry</code></pre>
+            </div>
+
+            <div class="code-block">
+                <pre><code>// Using primitive collections from fastutil
+it.unimi.dsi.fastutil.ints.IntArrayList list2 = new it.unimi.dsi.fastutil.ints.IntArrayList();
+list2.add(10); 
+list2.add(20);
+for (int i = 0; i &lt; list2.size(); i++) {
+    System.out.println(list2.getInt(i));
+}
+// Output:
+// 10
+// 20</code></pre>
+            </div>
+
+            <div class="info-box">
+                <strong>Zero-Allocation Benefits:</strong>
+                <ul>
+                    <li>No iterator object allocation per loop</li>
+                    <li>Reduced GC pressure in tight loops</li>
+                    <li>Better cache locality with primitive arrays</li>
+                    <li>Ideal for high-frequency operations</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="concurrent-collections">
+            <h2>3. Concurrent Collections &amp; Memory</h2>
+
+            <div class="code-block">
+                <pre><code>ConcurrentHashMap&lt;String, Integer&gt; map = new ConcurrentHashMap&lt;&gt;();
+map.put("one", 1);
+map.put("two", 2);
+map.put("three", 3);
+
+// Weakly consistent iterator - allows concurrent modifications
+for (Map.Entry&lt;String, Integer&gt; entry : map.entrySet()) {
+    System.out.println(entry.getKey() + " = " + entry.getValue());
+    // Safe to modify map during iteration
+    map.putIfAbsent("four", 4);
+}
+
+// CopyOnWriteArrayList - creates copy on modification
+CopyOnWriteArrayList&lt;String&gt; cowList = new CopyOnWriteArrayList&lt;&gt;();
+cowList.add("A");
+cowList.add("B");
+
+// Iterator sees snapshot at time of creation
+Iterator&lt;String&gt; it = cowList.iterator();
+cowList.add("C");  // Doesn't affect iterator
+
+while (it.hasNext()) {
+    System.out.println(it.next());  // Prints: A, B (not C)
+}</code></pre>
+            </div>
+
+            <div class="info-box">
+                <strong>Concurrent Collection Characteristics:</strong>
+                <ul>
+                    <li>ConcurrentHashMap: Weakly consistent iterators, segment-based locking</li>
+                    <li>CopyOnWriteArrayList: Snapshot iterators, expensive writes</li>
+                    <li>No ConcurrentModificationException thrown</li>
+                    <li>Higher memory overhead for thread safety</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="lambdas">
+            <h2>4. Lambdas in Collection Operations</h2>
+
+            <div class="code-block">
+                <pre><code>// Non-capturing lambda in forEach
+List&lt;Integer&gt; numbers = Arrays.asList(1, 2, 3, 4, 5);
+
+// Non-capturing lambda - can be reused by JVM
+numbers.forEach(n -&gt; System.out.println(n));
+
+// Capturing lambda - allocates new object each time
+int multiplier = 10;
+numbers.forEach(n -&gt; System.out.println(n * multiplier));  // Captures 'multiplier'
+
+// Method reference - preferred, zero allocation
+numbers.forEach(System.out::println);
+
+// Stream operations
+long sum = numbers.stream()
+    .filter(n -&gt; n % 2 == 0)    // Non-capturing
+    .mapToInt(Integer::intValue)
+    .sum();
+System.out.println("Sum of evens: " + sum);  // 6</code></pre>
+            </div>
+
+            <div class="comparison-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Lambda Type</th>
+                            <th>Allocates</th>
+                            <th>JVM Reuse Possible</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Non-capturing</td>
+                            <td>❌</td>
+                            <td>✅</td>
+                        </tr>
+                        <tr>
+                            <td>Capturing</td>
+                            <td>✅</td>
+                            <td>❌</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="info-box">
+                <strong>Lambda Memory Tips:</strong>
+                <ul>
+                    <li>Prefer method references over lambdas when possible</li>
+                    <li>Avoid capturing local variables in hot paths</li>
+                    <li>Non-capturing lambdas can be singleton instances</li>
+                    <li>Use primitive streams (IntStream, LongStream) to avoid boxing</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="memory-gc">
+            <h2>5. Memory Considerations &amp; GC</h2>
+
+            <div class="code-block">
+                <pre><code>// ArrayList vs LinkedList memory
+ArrayList&lt;Integer&gt; arrayList = new ArrayList&lt;&gt;();
+LinkedList&lt;Integer&gt; linkedList = new LinkedList&lt;&gt;();
+
+// ArrayList: contiguous array, better cache locality
+for (int i = 0; i &lt; 1000; i++) {
+    arrayList.add(i);  // Amortized O(1), occasional resize
+}
+
+// LinkedList: each node ~40 bytes overhead
+for (int i = 0; i &lt; 1000; i++) {
+    linkedList.add(i);  // Each add allocates new node
+}
+
+// Memory comparison:
+// ArrayList: ~4KB for array + ~16 bytes object header
+// LinkedList: ~40KB (40 bytes × 1000 nodes)
+
+// Pre-sizing to avoid allocations
+ArrayList&lt;Integer&gt; sized = new ArrayList&lt;&gt;(1000);  // No resize needed
+for (int i = 0; i &lt; 1000; i++) {
+    sized.add(i);  // Pure O(1), no reallocation
+}</code></pre>
+            </div>
+
+            <div class="info-box">
+                <strong>GC Impact:</strong>
+                <ul>
+                    <li>ArrayList resizing creates temporary garbage (old array)</li>
+                    <li>LinkedList creates many small objects (higher GC pressure)</li>
+                    <li>HashMap rehashing creates temporary garbage</li>
+                    <li>Pre-sizing collections reduces allocation rate</li>
+                    <li>Use object pools for frequently allocated objects</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="practical-checklist">
+            <h2>6. Practical Checklist</h2>
+            <ul>
+                <li>Use index-based loops for ArrayList/arrays when possible.</li>
+                <li>Prefer primitive collections for high-frequency operations.</li>
+                <li>Use weakly consistent iterators for concurrent maps.</li>
+                <li>Prefer method references / non-capturing lambdas in collection operations.</li>
+                <li>Reuse objects/buffers to reduce GC pressure.</li>
+                <li>Avoid LinkedList unless needed; prefer ArrayList.</li>
+                <li>Profile memory with JMH or async-profiler when optimizing collections.</li>
+            </ul>
+
+            <div class="comparison-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Pattern</th>
+                            <th>Allocates?</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Enhanced for (ArrayList)</td>
+                            <td>✅</td>
+                        </tr>
+                        <tr>
+                            <td>Index loop (ArrayList)</td>
+                            <td>❌</td>
+                        </tr>
+                        <tr>
+                            <td>Iterator (empty)</td>
+                            <td>✅</td>
+                        </tr>
+                        <tr>
+                            <td>Non-capturing lambda forEach</td>
+                            <td>❌</td>
+                        </tr>
+                        <tr>
+                            <td>Capturing lambda forEach</td>
+                            <td>✅</td>
+                        </tr>
+                        <tr>
+                            <td>LinkedList iteration</td>
+                            <td>✅</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Java Collections & Memory Management Examples | 2025</p>
+        <p><a href="index.html">← Back to Home</a></p>
+    </footer>
+</body>
+</html>
